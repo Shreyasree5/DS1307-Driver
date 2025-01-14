@@ -14,8 +14,9 @@ def validate(date_time):
         return False, "Seconds must be in range 0-59"
     if not (0 <= date_time["minutes"] <= 59):
         return False, "Minutes must be in range 0-59"
-    if not (0 <= date_time["hours"] <= 23):
-        return False, "Hours must be in range 0-23"
+    if (date_time["AMPM"]=="AM" or date_time["AMPM"]=="PM"):
+        if not(date_time["hours"]>=0 and date_time["hours"]<=12):
+            return False, "Hours must be in range 0-12"  
     if not (1 <= date_time["day"] <= 7):
         return False, "Day must be in range 1-7 (Monday-Sunday)"
     if not (1 <= date_time["date"] <= 31):
@@ -51,7 +52,7 @@ def setTime(date_time):
 
 def getTime():
 
-     data_time = bus.read_i2c_block_data(DS1307_ADDRESS, start_register, 7)
+     data_time = bus.read_i2c_block_data(DS1307_ADDRESS, start_register, 8)
 
      return {
         "seconds": bcd_to_decimal(data_time[0]),
@@ -67,18 +68,19 @@ def getTime():
 date_time_to_set = {
        "seconds":45,
        "minutes":22,
-       "hours":14,
+       "hours":7,
        "day":7,
        "date":5,
        "month":9,
-       "year":99
+       "year":99,
+       "AMPM": "PM"
 }
 
 setTime(date_time_to_set)
 
 #print the date and time in output
 current_time = getTime()
-print("Current Time: ",current_time)
+print("Current Time: ", current_time)
 
 
        
