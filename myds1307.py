@@ -55,15 +55,13 @@ def setTime(date_time):
 
             date_time_bcd = [decimal_to_bcd(date_time["seconds"]), decimal_to_bcd(date_time["minutes"]), n, decimal_to_bcd(date_time["day"]), decimal_to_bcd(date_time["date"]), decimal_to_bcd(date_time["month"]), decimal_to_bcd(date_time["year"])]
             bus.write_i2c_block_data(DS1307_ADDRESS, start_register, date_time_bcd)
-            print("Date and Time set succussfully:")
-            print(date_time)
+            print("Date and Time set succussfully:", date_time)
             return 0
         else:
             print(f"Validation failed: {message}")
             return -1        
 
 def getTime():
-
     data_time = bus.read_i2c_block_data(DS1307_ADDRESS, start_register, 7)
     n =((data_time[2] & (1<<6))>>6)
     if ( n != 0):
@@ -103,7 +101,7 @@ date_time_to_set = {
        "date":5,
        "month":9,
        "year":99,
-       #"AMPM": "AM"
+       "AMPM": "AM"
 }
 
 setTime(date_time_to_set)
