@@ -35,17 +35,18 @@ int main() {
     int choice;
 
     // Open FIFO for sending requests
-    fd_request = open("fifo_request", O_WRONLY);
+    fd_request = open("fifo_request", O_RDWR);
     if (fd_request < 0) {
         perror("Client: Error opening request FIFO");
         return -1;
     }
     // Open FIFO for receiving responses
-    fd_response = open("fifo_response", O_RDONLY);
-    if (fd_response < 0) {
-        perror("Client: Error opening response FIFO");
-        return -1;
-    }
+    // fd_response = open("fifo_response", O_RDONLY);
+    // if (fd_response < 0) {
+    //     perror("Client: Error opening response FIFO");
+    //     return -1;
+    // }
+    fd_response = fd_request;
 
     while(1) {
         // Prompt user for action
@@ -101,7 +102,7 @@ int main() {
 
 exit:
     close(fd_request);
-    close(fd_response);
+    // close(fd_response);
 
     return 0;
 }
