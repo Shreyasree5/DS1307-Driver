@@ -45,11 +45,10 @@ void getRTC(int response_fd) {
 int main() {
     // Create FIFOs
     mkfifo("fifo_request", 0666);
-    // mkfifo("fifo_response", 0666);
+    mkfifo("fifo_response", 0666);
 
-    int request_fd = open("fifo_request", O_RDWR);
-    // int response_fd = open("fifo_response", O_WRONLY);
-    int response_fd = request_fd;
+    int request_fd = open("fifo_request", O_RDONLY);
+    int response_fd = open("fifo_response", O_WRONLY);
 
     if (request_fd < 0 || response_fd < 0) {
         perror("Server: Error opening FIFO files");
@@ -81,9 +80,9 @@ int main() {
     }
 
     close(request_fd);
-    // close(response_fd);
+    close(response_fd);
     unlink("fifo_request");
-    // unlink("fifo_response");
+    unlink("fifo_response");
 
     return 0;
 }
