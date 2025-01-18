@@ -1,15 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/ipc.h>
-#include <sys/msg.h>
-#include "ds1307.h"
-
-#define MSGQ_KEY 1234
-
-struct message {
-    long msg_type; // 1: Set RTC request, 2: Get RTC request, 3: Response
-    struct date_time_to_set dtts; // RTC data structure
-};
+#include "msg_common.h"
 
 void enterData(struct date_time_to_set *dtts) {
     printf("Enter date, time, and day to set in RTC:\n");
@@ -29,6 +18,15 @@ void enterData(struct date_time_to_set *dtts) {
     scanf("%d", &dtts->year);
 }
 
+void setDefaultTime(struct date_time_to_set *dtts){
+    dtts->seconds = 00;
+    dtts->minutes = 30;
+    dtts->hours = 8;
+    dtts->day = 7;
+    dtts->date = 5;
+    dtts->month = 9;
+    dtts->year = 99;
+}
 void printTime(const struct date_time_to_set *dtts) {
     printf("Current Date and Time:\n");
     printf("Time: %02d:%02d:%02d\n", dtts->hours, dtts->minutes, dtts->seconds);
@@ -36,38 +34,38 @@ void printTime(const struct date_time_to_set *dtts) {
     printf("Day: %d\n", dtts->day);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     int msgid;
     struct message msg;
 
     // Get the message queue
-    if ((msgid = msgget(MSGQ_KEY, 0666)) == -1) {
+    msgid = CreateMsgQueue(0666);
+    if (msgid < 0) {
         perror("Client: Failed to access message queue");
         exit(EXIT_FAILURE);
     }
     while(1){
-        //printf("Choose an option:\n1. Set RTC\n2. Get RTC\n");
-        int choice=2;
-        //scanf("%d", &choice);
+        int choice;
+        // choice = GetUserInput();
+        sscanf(argv[1], "%d", &choice);
 
         if (choice == 1) {
-            msg.msg_type = 1; // Set RTC request
-            enterData(&msg.dtts);
-
-            if (msgsnd(msgid, &msg, sizeof(msg.dtts), 0) == -1) {
+            msg.msg_type = MSG_SET_TIME;
+            // enterData(&msg.dtts);
+            setDefaultTime(&msg.dtts);
+            int ret = SendMsg(msgid, &msg);
+            if (ret < 0) {
                 perror("Client: Failed to send set RTC request");
                 exit(EXIT_FAILURE);
             }
-
             printf("Client: Set RTC request sent. Waiting for acknowledgment...\n");
         } else if (choice == 2) {
-            msg.msg_type = 2; // Get RTC request
-
-            if (msgsnd(msgid, &msg, sizeof(msg.dtts), 0) == -1) {
+            msg.msg_type = MSG_GET_TIME;
+            int ret = SendMsg(msgid, &msg);
+            if (ret < 0) {
                 perror("Client: Failed to send get RTC request");
                 exit(EXIT_FAILURE);
             }
-
             printf("Client: Get RTC request sent. Waiting for response...\n");
         } else {
             printf("Invalid choice. Exiting.\n");
@@ -75,9 +73,14 @@ int main() {
         }
 
         // Wait for the server's response
-        if (msgrcv(msgid, &msg, sizeof(msg.dtts), 3, 0) == -1) {
+        int ret = ReceiveMsgAny(msgid, &msg);
+        if (ret < 0) {
             perror("Client: Error receiving response");
-            exit(EXIT_FAILURE);
+            if (msg.msg_type == MSG_SUCCESS) {
+                printf("Set time successful!\n");
+            } else if (msg.msg_type == MSG_FAILED) {
+                printf("Set time failed!\n");
+            }
         }
 
         if (choice == 1) {
