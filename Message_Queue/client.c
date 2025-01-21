@@ -19,9 +19,9 @@ void enterData(struct date_time_to_set *dtts) {
 }
 
 void setDefaultTime(struct date_time_to_set *dtts){
-    dtts->seconds = 00;
-    dtts->minutes = 30;
-    dtts->hours = 8;
+    dtts->seconds = 2;
+    dtts->minutes = 2;
+    dtts->hours = 2;
     dtts->day = 7;
     dtts->date = 5;
     dtts->month = 9;
@@ -37,23 +37,20 @@ void printTime(const struct date_time_to_set *dtts) {
 int main(int argc, char *argv[]) {
     int msgid;
     struct message msg;
-
-    // Get the message queue
-    msgid = CreateMsgQueue(0666);
-    if (msgid < 0) {
-        perror("Client: Failed to access message queue");
-        exit(EXIT_FAILURE);
+    CommHandle hComm = {0};
+    if (CreateResources(&hComm, COMM_TYPE_SHMSEM, 0666) < 0) {
+        perror("Client: Failed to create resources");
+        return -1;
     }
     while(1){
         int choice;
-        // choice = GetUserInput();
+        //choice = GetUserInput();
         sscanf(argv[1], "%d", &choice);
-
         if (choice == 1) {
             msg.msg_type = MSG_SET_TIME;
-            // enterData(&msg.dtts);
+            //enterData(&msg.dtts);
             setDefaultTime(&msg.dtts);
-            int ret = SendMsg(msgid, &msg);
+            int ret = SendMsg(&hComm, &msg);
             if (ret < 0) {
                 perror("Client: Failed to send set RTC request");
                 exit(EXIT_FAILURE);
@@ -61,7 +58,7 @@ int main(int argc, char *argv[]) {
             printf("Client: Set RTC request sent. Waiting for acknowledgment...\n");
         } else if (choice == 2) {
             msg.msg_type = MSG_GET_TIME;
-            int ret = SendMsg(msgid, &msg);
+            int ret = SendMsg(&hComm, &msg);
             if (ret < 0) {
                 perror("Client: Failed to send get RTC request");
                 exit(EXIT_FAILURE);
@@ -73,21 +70,18 @@ int main(int argc, char *argv[]) {
         }
 
         // Wait for the server's response
-        int ret = ReceiveMsgAny(msgid, &msg);
+        int ret = ReceiveMsgAny(&hComm, &msg);
         if (ret < 0) {
             perror("Client: Error receiving response");
-            if (msg.msg_type == MSG_SUCCESS) {
-                printf("Set time successful!\n");
-            } else if (msg.msg_type == MSG_FAILED) {
-                printf("Set time failed!\n");
-            }
         }
-
+        if (msg.msg_type == MSG_SUCCESS) {
         if (choice == 1) {
             printf("Client: RTC updated successfully.\n");
         } else if (choice == 2) {
-            printf("Client: Current RTC time received:\n");
             printTime(&msg.dtts);
+        }
+        } else if (msg.msg_type == MSG_FAILED) {
+            printf("Client: Operation failed.\n");
         }
         sleep(1);
     }

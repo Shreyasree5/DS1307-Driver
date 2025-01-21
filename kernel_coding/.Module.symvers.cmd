@@ -1,0 +1,1 @@
+savedcmd_/home/rshreyasree5/Documents/RTC/kernel_coding/Module.symvers :=  scripts/mod/modpost -M -m -a      -o /home/rshreyasree5/Documents/RTC/kernel_coding/Module.symvers -T /home/rshreyasree5/Documents/RTC/kernel_coding/modules.order -i Module.symvers -e 
