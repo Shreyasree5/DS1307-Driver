@@ -1,50 +1,43 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <string.h>
 #include <unistd.h>
+#include <stdint.h>
 
 struct date_time_to_set {
-	int seconds;
-	int minutes;
-	int hours;
-	int day;
-	int date;
-	int month;
-	int year;
+    int seconds, hours, minutes, day, date, month, year;
 };
 
-#define MY_MAGIC 'M'
-#define IOCTL_CMD_1 _IOW(MY_MAGIC, 1, struct date_time_to_set)
-#define IOCTL_CMD_2 _IOR(MY_MAGIC, 2, struct date_time_to_set)
+#define DEVICE "/dev/my_ioctl_device"
+#define IOCTL_MAGIC 'k'
+#define IOCTL_GET_TIME  _IOR(IOCTL_MAGIC, 1, struct date_time_to_set)
+#define IOCTL_SET_TIME _IOW(IOCTL_MAGIC, 2, struct date_time_to_set)
 
 int main() {
-    int fd = open("/dev/my_ioctl_device", O_RDWR);
+    int fd;
+    fd = open(DEVICE, O_RDWR);
     if (fd < 0) {
         perror("Failed to open device");
-        return 1;
+        return -1;
     }
 
-    struct date_time_to_set dtts = {10, 12, 9, 3, 9, 6, 96};
-
-    if (ioctl(fd, IOCTL_CMD_1, &dtts) < 0) {
-        perror("IOCTL_CMD_1 failed");
+    struct date_time_to_set set_time = {1, 2, 3, 4, 5, 6, 7};
+   
+    if (ioctl(fd, IOCTL_SET_TIME, &set_time) < 0) {
+        perror("Failed to write to register");
         close(fd);
-        return 1;
+        return -1;
     }
+    printf("RTC time set successfully\n");
 
-    struct date_time_to_set dtts_rcv;
-    if (ioctl(fd, IOCTL_CMD_2, &dtts_rcv) < 0) {
-        perror("IOCTL_CMD_2 failed");
+    struct date_time_to_set get_time;
+    if (ioctl(fd, IOCTL_GET_TIME, &get_time) < 0) {
+        perror("Failed to read from register");
         close(fd);
-        return 1;
-    }
+        return -1;
+    } 
+    printf("RTC Current Time: %02d:%02d:%02d, Date: %02d/%02d/%02d\n",get_time.hours, get_time.minutes, get_time.seconds, get_time.date, get_time.month, get_time.year);
 
-    printf("Message from kernel: \n");
-    printf("Current Date and Time:\n");
-    printf("Time: %02d:%02d:%02d\n", dtts_rcv.hours, dtts_rcv.minutes, dtts_rcv.seconds);
-    printf("Date: %02d/%02d/%02d\n", dtts_rcv.date, dtts_rcv.month, dtts_rcv.year);
-    printf("Day: %d\n", dtts_rcv.day);
     close(fd);
     return 0;
 }
