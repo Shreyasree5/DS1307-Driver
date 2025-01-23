@@ -3,7 +3,10 @@
 #include <linux/uaccess.h>
 #include <linux/i2c.h>
 #include <linux/cdev.h>
-
+#include <linux/slab.h>
+#include <linux/module.h>
+#include <linux/init.h>
+//#include <linux/delay.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Shreya Sree Ravutla");
@@ -12,6 +15,7 @@ MODULE_DESCRIPTION("RTC Driver with IOCTL support");
 struct date_time_to_set {
     int seconds, hours, minutes, day, date, month, year;
 };
+
 int decimal_to_bcd(int n){
 	return ( ((n/10)<<4) | (n%10) );
 }
@@ -20,20 +24,28 @@ int bcd_to_decimal(uint8_t n){
 }
 
 #define IOCTL_MAGIC 'k'
+
 #define IOCTL_GET_TIME _IOR(IOCTL_MAGIC, 1, struct date_time_to_set)
 #define IOCTL_SET_TIME _IOW(IOCTL_MAGIC, 2, struct date_time_to_set)
+#define IOCTL_ACQ_COOKIE _IOR(IOCTL_MAGIC, 3, char)
+#define IOCTL_SEND_COOKIE _IOW(IOCTL_MAGIC, 4, char)
 
 #define DEVICE_NAME "my_ioctl_device"
 #define I2C_BUS_NUMBER 1       // I2C bus number (e.g., /dev/i2c-1)
 #define I2C_SLAVE_ADDR 0x68    // I2C device address
 
 static struct i2c_client *rtc_client;
+static DEFINE_MUTEX(cookie_mutex);
+static bool cookie_in_use = false;
+static pid_t cookie_owner_pid  = -1;
 
 //ioctl handler
 static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
     struct date_time_to_set dtts;
     char data[8];
     int ret;
+    char cookie_to_send = 'R';
+    pid_t current_pid = task_pid_nr(current);
 
     if (!rtc_client) {
         pr_err("RTC client not initialized\n");
@@ -41,9 +53,58 @@ static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
     }
 
     switch (cmd) {
+        case IOCTL_ACQ_COOKIE:
+            mutex_lock(&cookie_mutex);
+            if(cookie_in_use){
+                mutex_unlock(&cookie_mutex);
+                pr_err("Cookie already in use by PID %d\n", cookie_owner_pid);
+                return -EBUSY;
+            }
+            cookie_in_use = true;
+            cookie_owner_pid = current_pid;
+
+            if(copy_to_user((char *)arg, &cookie_to_send, sizeof(char))){
+                pr_err("Failed to assign cookie\n");
+                mutex_unlock(&cookie_mutex);
+                return -EFAULT;
+            }
+            mutex_unlock(&cookie_mutex);
+            pr_info("Cookie assigned successfully to PID %d\n", current_pid);
+            break;
+
+        case IOCTL_SEND_COOKIE:
+            char cookie;
+            mutex_lock(&cookie_mutex);
+            if(cookie_owner_pid!=current_pid){
+                mutex_unlock(&cookie_mutex);
+                return -EPERM;
+            }
+            if(copy_from_user(&cookie, (char*)arg, sizeof(char))){
+                pr_err("Failed to receive cookie\n");
+                mutex_unlock(&cookie_mutex);
+                return 0;
+            }
+            if (cookie != cookie_to_send) {
+                pr_err("Invalid cookie received: %c\n", cookie);
+                mutex_unlock(&cookie_mutex);
+                return -EINVAL;
+            }
+            pr_info("Valid cookie received from user\n");
+            mutex_unlock(&cookie_mutex);
+            break;
+
         case IOCTL_SET_TIME:
+            mutex_lock(&cookie_mutex);
+            if (cookie_owner_pid != current_pid) {
+                mutex_unlock(&cookie_mutex);
+                pr_err("PID %d does not own the cookie. Cannot set time.\n", current_pid);
+                return -EPERM;
+            }
+            mutex_unlock(&cookie_mutex);
+
             if (copy_from_user(&dtts, (struct date_time_to_set *)arg, sizeof(dtts))){
                 pr_err("Failed to copy data from user\n");
+                mutex_unlock(&cookie_mutex);
                 return -EFAULT;
             }
             pr_info("Setting RTC time: %02d:%02d:%02d %02d/%02d/%02d\n", dtts.hours, dtts.minutes, dtts.seconds, dtts.date, dtts.month, dtts.year);
@@ -61,8 +122,10 @@ static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
             ret = i2c_master_send(rtc_client, data, sizeof(data));
             if (ret < 0){
                 pr_err("Failed to write to RTC\n");
+                mutex_unlock(&cookie_mutex);
                 return -EIO;
             } 
+            //msleep(10000);
             pr_info("RTC time set successfully\n");
             break;
 
@@ -70,6 +133,7 @@ static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
             data[0] = 0x00; 
             if (i2c_master_send(rtc_client, data, 1) < 0) {
                 pr_err("Failed to request RTC time\n");
+                mutex_unlock(&cookie_mutex);
                 return -EIO;
             }
 
@@ -77,6 +141,7 @@ static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
             ret = i2c_master_recv(rtc_client, data, sizeof(data));
             if (ret < 0) {
                 pr_err("Failed to read from RTC\n");
+                mutex_unlock(&cookie_mutex);
                 return ret;
             }
 
